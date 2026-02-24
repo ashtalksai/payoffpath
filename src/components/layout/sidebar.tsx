@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -40,6 +41,18 @@ const navItems = [
 
 function NavContent({ onItemClick }: { onItemClick?: () => void }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const user = session?.user;
+  const initials = user?.name
+    ?.split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase() || "?";
+
+  const handleSignOut = () => {
+    signOut({ callbackUrl: "/" });
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -82,12 +95,12 @@ function NavContent({ onItemClick }: { onItemClick?: () => void }) {
           <DropdownMenuTrigger asChild>
             <button className="flex w-full items-center gap-3 rounded-lg p-2 text-sm hover:bg-surface-hover transition-colors">
               <Avatar className="h-8 w-8">
-                <AvatarImage src="/avatar.png" />
-                <AvatarFallback>JD</AvatarFallback>
+                <AvatarImage src={user?.image || ""} />
+                <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
               <div className="flex-1 text-left">
-                <p className="font-medium">John Doe</p>
-                <p className="text-xs text-muted-foreground">Pro Plan</p>
+                <p className="font-medium truncate">{user?.name || "User"}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
               </div>
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </button>
@@ -108,11 +121,9 @@ function NavContent({ onItemClick }: { onItemClick?: () => void }) {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/login">
-                <LogOut className="mr-2 h-4 w-4" />
-                Log out
-              </Link>
+            <DropdownMenuItem onClick={handleSignOut}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

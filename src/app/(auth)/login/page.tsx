@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,26 +22,35 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login - in production this would call NextAuth signIn
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    if (email && password) {
-      toast.success("Welcome back!");
-      router.push("/dashboard");
-    } else {
-      toast.error("Please fill in all fields");
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        toast.error("Invalid email or password");
+      } else {
+        toast.success("Welcome back!");
+        router.push("/dashboard");
+        router.refresh();
+      }
+    } catch {
+      toast.error("Something went wrong");
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
-    // Simulate Google OAuth - in production this would call NextAuth signIn with Google provider
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    toast.success("Logged in with Google!");
-    router.push("/dashboard");
-    setIsLoading(false);
+    try {
+      await signIn("google", { callbackUrl: "/dashboard" });
+    } catch {
+      toast.error("Failed to sign in with Google");
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -115,7 +125,7 @@ export default function LoginPage() {
         </Button>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link href="/signup" className="text-primary hover:underline">
             Sign up
           </Link>

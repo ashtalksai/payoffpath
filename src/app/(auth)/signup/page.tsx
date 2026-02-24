@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,26 +38,48 @@ export default function SignupPage() {
 
     setIsLoading(true);
 
-    // Simulate signup - in production this would create user and sign in
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    if (name && email && password) {
+    try {
+      // Register user
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create account");
+      }
+
+      // Sign in automatically
+      const signInResult = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (signInResult?.error) {
+        throw new Error("Failed to sign in");
+      }
+
       toast.success("Account created! Welcome to PayoffPath.");
       router.push("/dashboard");
-    } else {
-      toast.error("Please fill in all fields");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Something went wrong");
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   const handleGoogleSignup = async () => {
     setIsLoading(true);
-    // Simulate Google OAuth
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    toast.success("Account created with Google!");
-    router.push("/dashboard");
-    setIsLoading(false);
+    try {
+      await signIn("google", { callbackUrl: "/dashboard" });
+    } catch {
+      toast.error("Failed to sign up with Google");
+      setIsLoading(false);
+    }
   };
 
   return (
