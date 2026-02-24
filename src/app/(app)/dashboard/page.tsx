@@ -1,90 +1,28 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { TrendingDown, TrendingUp, DollarSign, Calendar, Clock, CreditCard, Plus, Loader2 } from "lucide-react";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { TrendingDown, TrendingUp, DollarSign, Calendar, Clock, CreditCard } from "lucide-react";
-import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
 } from "recharts";
 
-// Mock data
-const stats = [
-  {
-    title: "Total Debt",
-    value: "$45,450",
-    change: "-$1,230",
-    trend: "down",
-    icon: CreditCard,
-  },
-  {
-    title: "Monthly Burn",
-    value: "$3,240",
-    change: "+$120",
-    trend: "up",
-    icon: DollarSign,
-  },
-  {
-    title: "Debt-Free Date",
-    value: "Mar 2028",
-    change: "2 mo earlier",
-    trend: "down",
-    icon: Calendar,
-  },
-  {
-    title: "Runway",
-    value: "36 months",
-    change: "On track",
-    trend: "stable",
-    icon: Clock,
-  },
-];
-
-const runwayData = [
-  { month: "Jan", actual: 48000, projected: 48000 },
-  { month: "Feb", actual: 46500, projected: 46800 },
-  { month: "Mar", actual: 45450, projected: 45600 },
-  { month: "Apr", actual: null, projected: 44400 },
-  { month: "May", actual: null, projected: 43200 },
-  { month: "Jun", actual: null, projected: 42000 },
-  { month: "Jul", actual: null, projected: 40800 },
-  { month: "Aug", actual: null, projected: 39600 },
-  { month: "Sep", actual: null, projected: 38400 },
-  { month: "Oct", actual: null, projected: 37200 },
-  { month: "Nov", actual: null, projected: 36000 },
-  { month: "Dec", actual: null, projected: 34800 },
-];
-
-const debtTimeline = [
-  { name: "Credit Card", total: 8450, paid: 5915, color: "#14b8a6" },
-  { name: "Student Loan", total: 24200, paid: 10890, color: "#0d9488" },
-  { name: "Car Loan", total: 12800, paid: 7040, color: "#2dd4bf" },
-];
-
-const recentTransactions = [
-  { id: 1, date: "2026-02-24", description: "Grocery Store", category: "Food", amount: -124.50 },
-  { id: 2, date: "2026-02-23", description: "Paycheck", category: "Income", amount: 3250.00 },
-  { id: 3, date: "2026-02-22", description: "Electric Bill", category: "Utilities", amount: -89.00 },
-  { id: 4, date: "2026-02-21", description: "Netflix", category: "Entertainment", amount: -15.99 },
-  { id: 5, date: "2026-02-20", description: "Gas Station", category: "Transportation", amount: -45.00 },
-  { id: 6, date: "2026-02-19", description: "Credit Card Payment", category: "Debt", amount: -500.00 },
-  { id: 7, date: "2026-02-18", description: "Coffee Shop", category: "Food", amount: -6.50 },
-  { id: 8, date: "2026-02-17", description: "Freelance Payment", category: "Income", amount: 850.00 },
-];
+interface Debt {
+  id: string;
+  name: string;
+  balance: number;
+  originalBalance: number;
+  apr: number;
+  minimumPayment: number;
+  dueDate: number;
+}
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat("en-US", {
@@ -93,7 +31,108 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
+function generateProjectionData(totalDebt: number, monthlyPayment: number) {
+  const data = [];
+  let remaining = totalDebt;
+  const today = new Date();
+  
+  for (let i = 0; i < 12; i++) {
+    const date = new Date(today);
+    date.setMonth(date.getMonth() + i);
+    const monthName = date.toLocaleDateString("en-US", { month: "short" });
+    
+    data.push({
+      month: monthName,
+      actual: i === 0 ? remaining : null,
+      projected: Math.max(0, remaining),
+    });
+    
+    remaining = Math.max(0, remaining - monthlyPayment);
+  }
+  
+  return data;
+}
+
+function calculateDebtFreeDate(totalDebt: number, monthlyPayment: number): string {
+  if (monthlyPayment <= 0 || totalDebt <= 0) return "—";
+  
+  const months = Math.ceil(totalDebt / monthlyPayment);
+  const date = new Date();
+  date.setMonth(date.getMonth() + months);
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
 export default function DashboardPage() {
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDebts = async () => {
+      try {
+        const res = await fetch("/api/debts");
+        if (res.ok) {
+          const data = await res.json();
+          setDebts(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch debts:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDebts();
+  }, []);
+
+  const totalDebt = debts.reduce((sum, d) => sum + d.balance, 0);
+  const totalOriginalDebt = debts.reduce((sum, d) => sum + d.originalBalance, 0);
+  const totalMinPayment = debts.reduce((sum, d) => sum + d.minimumPayment, 0);
+  const extraPayment = 200;
+  const totalMonthlyPayment = totalMinPayment + extraPayment;
+  const paidOff = totalOriginalDebt - totalDebt;
+  
+  const debtFreeDate = calculateDebtFreeDate(totalDebt, totalMonthlyPayment);
+  const runwayMonths = totalMonthlyPayment > 0 ? Math.ceil(totalDebt / totalMonthlyPayment) : 0;
+  const projectionData = generateProjectionData(totalDebt, totalMonthlyPayment);
+
+  const stats = [
+    {
+      title: "Total Debt",
+      value: debts.length > 0 ? formatCurrency(totalDebt) : "—",
+      change: paidOff > 0 ? `-${formatCurrency(paidOff)}` : "—",
+      trend: paidOff > 0 ? "down" : "stable",
+      icon: CreditCard,
+    },
+    {
+      title: "Monthly Burn",
+      value: debts.length > 0 ? formatCurrency(totalMonthlyPayment) : "—",
+      change: debts.length > 0 ? `${formatCurrency(totalMinPayment)} min` : "—",
+      trend: "stable",
+      icon: DollarSign,
+    },
+    {
+      title: "Debt-Free Date",
+      value: debtFreeDate,
+      change: runwayMonths > 0 ? `${runwayMonths} months` : "—",
+      trend: "down",
+      icon: Calendar,
+    },
+    {
+      title: "Runway",
+      value: runwayMonths > 0 ? `${runwayMonths} months` : "—",
+      change: debts.length > 0 ? "On track" : "—",
+      trend: "stable",
+      icon: Clock,
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -134,174 +173,170 @@ export default function DashboardPage() {
                 >
                   {stat.change}
                 </span>
-                <span className="ml-1">from last month</span>
               </p>
             </CardContent>
           </Card>
         ))}
       </div>
 
+      {/* Empty State */}
+      {debts.length === 0 && (
+        <Card className="border-border bg-card">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <CreditCard className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No debts tracked yet</h3>
+            <p className="text-muted-foreground text-center mb-4 max-w-md">
+              Start by adding your debts. PayoffPath will help you visualize your path to financial freedom.
+            </p>
+            <Button asChild>
+              <Link href="/debts">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Your First Debt
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Runway Chart */}
+      {debts.length > 0 && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Runway Chart */}
+          <Card className="border-border bg-card">
+            <CardHeader>
+              <CardTitle>Debt Payoff Projection</CardTitle>
+              <CardDescription>
+                Projected debt over the next 12 months
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={projectionData}>
+                    <XAxis
+                      dataKey="month"
+                      stroke="#6b6b6b"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      stroke="#6b6b6b"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `$${value / 1000}k`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#141414",
+                        border: "1px solid #2a2a2a",
+                        borderRadius: "8px",
+                      }}
+                      formatter={(value) => [formatCurrency(value as number), ""]}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="actual"
+                      stroke="#14b8a6"
+                      strokeWidth={2}
+                      dot={{ fill: "#14b8a6", strokeWidth: 0 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="projected"
+                      stroke="#6b6b6b"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex justify-center gap-6 mt-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-3 w-3 rounded-full bg-primary" />
+                  <span className="text-sm text-muted-foreground">Current</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-3 w-3 rounded-full bg-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Projected</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Debt Timeline */}
+          <Card className="border-border bg-card">
+            <CardHeader>
+              <CardTitle>Debt Timeline</CardTitle>
+              <CardDescription>
+                Progress on each debt account
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {debts.map((debt) => {
+                  const percentage = Math.round(((debt.originalBalance - debt.balance) / debt.originalBalance) * 100);
+                  const remaining = debt.balance;
+                  return (
+                    <div key={debt.id}>
+                      <div className="flex justify-between mb-2">
+                        <span className="font-medium">{debt.name}</span>
+                        <span className="font-mono text-sm text-muted-foreground">
+                          {formatCurrency(remaining)} remaining
+                        </span>
+                      </div>
+                      <div className="h-4 rounded-full bg-secondary overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-500"
+                          style={{
+                            width: `${Math.max(0, percentage)}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-xs text-muted-foreground">
+                          {Math.max(0, percentage)}% paid
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatCurrency(debt.originalBalance - debt.balance)} of {formatCurrency(debt.originalBalance)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Quick Actions */}
+      {debts.length > 0 && (
         <Card className="border-border bg-card">
           <CardHeader>
-            <CardTitle>Debt Payoff Projection</CardTitle>
-            <CardDescription>
-              Actual vs projected debt over the next 12 months
-            </CardDescription>
+            <CardTitle>Quick Actions</CardTitle>
+            <CardDescription>Common tasks to manage your finances</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={runwayData}>
-                  <XAxis
-                    dataKey="month"
-                    stroke="#6b6b6b"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="#6b6b6b"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `$${value / 1000}k`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#141414",
-                      border: "1px solid #2a2a2a",
-                      borderRadius: "8px",
-                    }}
-                    formatter={(value) => [formatCurrency(value as number), ""]}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="actual"
-                    stroke="#14b8a6"
-                    strokeWidth={2}
-                    dot={{ fill: "#14b8a6", strokeWidth: 0 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="projected"
-                    stroke="#6b6b6b"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex justify-center gap-6 mt-4">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-primary" />
-                <span className="text-sm text-muted-foreground">Actual</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Projected</span>
-              </div>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild variant="secondary">
+                <Link href="/debts">
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  Manage Debts
+                </Link>
+              </Button>
+              <Button asChild variant="secondary">
+                <Link href="/debts">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add New Debt
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
-
-        {/* Debt Timeline */}
-        <Card className="border-border bg-card">
-          <CardHeader>
-            <CardTitle>Debt Timeline</CardTitle>
-            <CardDescription>
-              Progress on each debt account
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {debtTimeline.map((debt) => {
-                const percentage = Math.round((debt.paid / debt.total) * 100);
-                const remaining = debt.total - debt.paid;
-                return (
-                  <div key={debt.name}>
-                    <div className="flex justify-between mb-2">
-                      <span className="font-medium">{debt.name}</span>
-                      <span className="font-mono text-sm text-muted-foreground">
-                        {formatCurrency(remaining)} remaining
-                      </span>
-                    </div>
-                    <div className="h-4 rounded-full bg-secondary overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${percentage}%`,
-                          backgroundColor: debt.color,
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between mt-1">
-                      <span className="text-xs text-muted-foreground">
-                        {percentage}% paid
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatCurrency(debt.paid)} of {formatCurrency(debt.total)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Transactions */}
-      <Card className="border-border bg-card">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Recent Transactions</CardTitle>
-              <CardDescription>Your last 8 transactions</CardDescription>
-            </div>
-            <Badge variant="secondary">View All</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border hover:bg-surface-hover">
-                <TableHead>Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recentTransactions.map((tx) => (
-                <TableRow
-                  key={tx.id}
-                  className="border-border hover:bg-surface-hover"
-                >
-                  <TableCell className="font-mono text-muted-foreground">
-                    {tx.date}
-                  </TableCell>
-                  <TableCell>{tx.description}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{tx.category}</Badge>
-                  </TableCell>
-                  <TableCell
-                    className={`text-right font-mono ${
-                      tx.amount >= 0 ? "text-green-500" : "text-red-500"
-                    }`}
-                  >
-                    {tx.amount >= 0 ? "+" : ""}
-                    {formatCurrency(tx.amount)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      )}
     </div>
   );
 }
